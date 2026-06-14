@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "delay-check"
+version = "1.0.0"
+description = "Tool to calculate the time offset (delay) between two audio files, ideal for synchronization."
+readme = "README.md"
+license = { text = "MIT" }
+authors = [
+    { name = "Sicuskyle" }
+]
+requires-python = ">=3.10"
+dependencies = [
+    "pymediainfo>=6.1.0",
+    "librosa>=0.10.1",
+    "soundfile>=0.12.1",
+    "numpy>=1.24.0",
+    "scipy>=1.10.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/sicuskyle/delay-check"
+
+[project.scripts]
+delay-check = "delay_check.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+delay_check = ["config.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]

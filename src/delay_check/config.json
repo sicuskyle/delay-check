@@ -1,0 +1,53 @@
+{
+  "version": "1.0.0",
+  "application": {
+    "name": "Delay Check",
+    "temp_dir_name": "delay_check",
+    "default_analysis_time_sec": 300,
+    "segment_analysis_time_sec": 120,
+    "confidence_threshold": 55,
+    "drift_tolerance_ms": {
+      "excellent": 25,
+      "good": 50,
+      "acceptable": 75,
+      "poor": 100
+    }
+  },
+  "audio_processing": {
+    "sample_rate": 44100,
+    "channels": 1,
+    "codec": "pcm_s16le",
+    "mfcc": {
+      "n_mfcc": 13,
+      "n_fft": 1024,
+      "n_mels": 20,
+      "hop_length": 512
+    }
+  },
+  "file_extensions": {
+    "containers": [".mkv", ".mp4", ".mka", ".m4a"],
+    "audio": [".wav", ".eac3", ".e-ac3", ".ac3", ".ec3", ".aac", ".dts", ".dtshd", ".flac", ".thd", ".mp3"],
+    "supported_formats": []
+  },
+  "confidence_scoring": {
+    "base_confidence": 20.0,
+    "max_per_segment": 20.0,
+    "segments_to_analyze": 4,
+    "penalty_factors": {
+      "excellent": 1.0,
+      "good": 0.95,
+      "acceptable": 0.85,
+      "poor": 0.70,
+      "failed": 0.0
+    }
+  },
+  "external_tools": {
+    "required": ["ffmpeg"],
+    "optional": []
+  },
+  "logging": {
+    "level": "INFO",
+    "format": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    "file": "delay_check.log"
+  }
+}

@@ -1,0 +1,26 @@
+# Python
+**/__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+
+# Environment
+.env
+.venv/
+
+# Logs
+delay_check.log
+*.log
+
+# Local test script
+test.bat
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
