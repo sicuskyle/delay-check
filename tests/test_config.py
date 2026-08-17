@@ -1,5 +1,4 @@
 import json
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -57,7 +56,7 @@ class TestConfig:
                 "temp_dir_name": "custom_temp",
                 "default_analysis_time_sec": 600,
                 "segment_analysis_time_sec": 120,
-                "confidence_threshold": 70,
+                "confidence_threshold": 90,
                 "drift_tolerance_ms": {
                     "excellent": 10,
                     "good": 30,

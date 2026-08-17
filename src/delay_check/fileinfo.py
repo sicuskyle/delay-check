@@ -72,13 +72,19 @@ class FileInfo:
         config = get_config()
         return config.is_audio(self._extension)
 
+    def _audio_params_suffix(self) -> str:
+        from delay_check.config import get_config
+        config = get_config()
+        return f"{config.sample_rate}-{config.audio_channels}ch-{config.audio_codec}"
+
     def get_sample_path(self, display_id: Optional[int] = None) -> Path:
+        params = self._audio_params_suffix()
         if self.is_audio:
-            return self._temppath / f"{self._stem}_sample.wav"
+            return self._temppath / f"{self._stem}_sample_{params}.wav"
         else:
             if display_id is None:
                 display_id = self._track_index
-            return self._temppath / f"{self._stem}_AudioTrack_{display_id}_sample.wav"
+            return self._temppath / f"{self._stem}_AudioTrack_{display_id}_sample_{params}.wav"
 
     def exists(self) -> bool:
         return self._path.exists()

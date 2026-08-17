@@ -12,12 +12,11 @@ class Config:
     DEFAULT_CONFIG_PATH = Path(__file__).parent / "config.json"
 
     DEFAULT_CONFIG = {
-        "version": "1.0.0",
         "application": {
             "name": "Delay Check",
             "temp_dir_name": "delay_check",
             "default_analysis_time_sec": 300,
-            "segment_analysis_time_sec": 60,
+            "segment_analysis_time_sec": 120,
             "confidence_threshold": 80,
             "drift_tolerance_ms": {
                 "excellent": 25,
@@ -39,7 +38,10 @@ class Config:
         },
         "file_extensions": {
             "containers": [".mkv", ".mp4", ".mka", ".m4a"],
-            "audio": [".wav", ".eac3", ".e-ac3", ".ac3", ".ec3", ".aac", ".dts", ".dtshd", ".flac", ".thd", ".mp3"],
+            "audio": [
+                ".wav", ".eac3", ".e-ac3", ".ac3", ".ec3", ".aac",
+                ".dts", ".dtshd", ".flac", ".thd", ".mp3"
+            ],
             "supported_formats": []
         },
         "confidence_scoring": {
@@ -138,7 +140,7 @@ class Config:
 
     @property
     def segment_analysis_time_sec(self) -> int:
-        return self.get("application", "segment_analysis_time_sec", default=60)
+        return self.get("application", "segment_analysis_time_sec", default=120)
 
     @property
     def confidence_threshold(self) -> int:
@@ -214,7 +216,10 @@ class Config:
 
     @property
     def log_format(self) -> str:
-        return self.get("logging", "format", default="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        return self.get(
+            "logging", "format",
+            default="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
 
     @property
     def log_file(self) -> str:

@@ -32,20 +32,42 @@ async def initial_delay(ref_sample: Path, dub_sample: Path, max_sec=None) -> tup
     print("Strategy:\nFingerprints + Cross-Correlation (1 Segment)")
 
     start_sec = 0
-    analize_time = f"  > {ms_to_timestamp(sec_to_ms(max_sec))} ({str(max_sec)} Seconds) in both Samples"
+    analize_time = (
+        f"  > {ms_to_timestamp(sec_to_ms(max_sec))} ({str(max_sec)} Seconds) in both Samples"
+    )
 
     print(f"Time to be analyzed: \n {analize_time}")
     print_subt(" # SoundFile > Loading Samples...", 55)
 
     try:
-        ref_audio = await load_spinner(load_audio_sf, ref_sample, start_sec, max_sec, message="Ref audio")
-        dub_audio = await load_spinner(load_audio_sf, dub_sample, start_sec, max_sec, message="Dub audio")
+        ref_audio = await load_spinner(
+            load_audio_sf, ref_sample, start_sec, max_sec, message="Ref audio"
+        )
+        dub_audio = await load_spinner(
+            load_audio_sf, dub_sample, start_sec, max_sec, message="Dub audio"
+        )
         print_subt("Analyzing Samples to Obtain Delay...", 55)
         return await find_offset_fgp(ref_audio, dub_audio)
     except AudioProcessingError as e:
         logging.error(f"Error during initial delay calculation: {e}")
         print(f"\n[ERROR] Failed to calculate initial delay: {e}")
         raise
+
+
+def get_lowest(a: int, b: int) -> int:
+    return a if a < b else b
+
+
+def segments_times(max_duration_sec, max_sec):
+    times = [
+        max_duration_sec * 0.25,
+        max_duration_sec // 2,
+        max_duration_sec * 0.75,
+        max(max_duration_sec - max_sec, 0),
+    ]
+
+    for segment, time in enumerate(times, start=2):
+        yield segment, time
 
 
 async def segment_delays(ref_sample: Path, dub_sample: Path, delay_s1: int, max_sec=None) -> list:
@@ -57,9 +79,6 @@ async def segment_delays(ref_sample: Path, dub_sample: Path, delay_s1: int, max_
     analize_time = f"  > {ms_to_timestamp(sec_to_ms(max_sec))} ({str(max_sec)} Seconds)"
 
     print(f"Time to be analyzed by segment: \n {analize_time}\n")
-
-    def get_lowest(a: int, b: int) -> int:
-        return a if a < b else b
 
     try:
         print('Identifying the audio with the shortest duration...')
@@ -73,23 +92,13 @@ async def segment_delays(ref_sample: Path, dub_sample: Path, delay_s1: int, max_
 
     print('Calculating all segment times...')
 
-    def segments_times(max_duration_sec, max_sec):
-        times = [
-            max_duration_sec * 0.25,
-            max_duration_sec // 2,
-            max_duration_sec * 0.75,
-            max(max_duration_sec - max_sec, 0),
-        ]
-
-        for segment, time in enumerate(times, start=2):
-            yield segment, time
-
     segments_delay_data = []
 
     try:
         for segment, seg_st_time in segments_times(max_duration_sec, max_sec):
 
-            print_subt(f" Analyzing Segment #{segment} | Start Time: {ms_to_timestamp(sec_to_ms(seg_st_time))}", 50)
+            seg_start_ts = ms_to_timestamp(sec_to_ms(seg_st_time))
+            print_subt(f" Analyzing Segment #{segment} | Start Time: {seg_start_ts}", 50)
             ref_audio = load_audio_sf(ref_sample, seg_st_time, max_sec)
             dub_audio = load_audio_sf(dub_sample, seg_st_time, max_sec)
             delay_ms, corr_score = await find_offset_fgp(ref_audio, dub_audio)
@@ -104,14 +113,22 @@ async def segment_delays(ref_sample: Path, dub_sample: Path, delay_s1: int, max_
     delays_segments = []
 
     if segments_delay_data:
-        fisrt_seg_max_sec = config.default_analysis_time_sec
-        segments_delay_data.insert(0, {"Start": ms_to_timestamp(0), "End": ms_to_timestamp(sec_to_ms(0 + fisrt_seg_max_sec)), "Delay": delay_s1})
+        first_seg_max_sec = config.default_analysis_time_sec
+        segments_delay_data.insert(0, {
+            "Start": ms_to_timestamp(0),
+            "End": ms_to_timestamp(sec_to_ms(0 + first_seg_max_sec)),
+            "Delay": delay_s1
+        })
 
         print_subt("### Segment delay list ###", 58, center=True)
         print("# |    Start   -   End        |  Delay\n" + "-" * 58)
         for idx, segment in enumerate(segments_delay_data, start=1):
-            print(f"{idx}: |{segment.get('Start')} - {segment.get('End')}| {segment.get('Delay')} ms ({ms_to_seconds(segment.get('Delay'))}) Seconds")
-            delays_segments.append(segment.get('Delay'))
+            delay = segment.get('Delay')
+            print(
+                f"{idx}: |{segment.get('Start')} - {segment.get('End')}| "
+                f"{delay} ms ({ms_to_seconds(delay)}) Seconds"
+            )
+            delays_segments.append(delay)
     return delays_segments
 
 
@@ -198,7 +215,7 @@ async def delay_check():
     except (FileValidationError, AudioProcessingError) as e:
         print(f"\n[ERROR] {e}")
         return None
-    except SystemExit as e:
+    except SystemExit:
         raise
 
     init_delay_ms = None
@@ -214,11 +231,17 @@ async def delay_check():
 
         print_subt("### Delay Results ###", 55, center=True)
         print(f" ### Correlation Score: {(corr_score)}%")
-        print(f" ### Estimated Delay: ({(init_delay_ms)} ms) | ({ms_to_seconds(init_delay_ms)} Seconds)")
+        print(
+            f" ### Estimated Delay: ({(init_delay_ms)} ms) "
+            f"| ({ms_to_seconds(init_delay_ms)} Seconds)"
+        )
 
         if corr_score < config.confidence_threshold:
-            print(f"\n Warning: No confidence found in the correlation")
-            print(f"\n Case #1: The audio files are not the same (excluding dubbing and volume differences)")
+            print("\n Warning: No confidence found in the correlation")
+            print(
+                "\n Case #1: The audio files are not the same "
+                "(excluding dubbing and volume differences)"
+            )
             return None
 
         delays_segments = await segment_delays(ref_sample_path, dub_sample_path, init_delay_ms)
@@ -245,8 +268,8 @@ async def delay_check():
                     delay = segment.get('delay_found')
                     drift = segment.get('drift_amount')
                     print(f"    #{idx:<5} | {delay:>6}ms | {drift:>6} ms")
-            print(f"\nRecommendation: Visually review the audio files")
-            print(f"\nPossible causes:\nDifferent FPS\nDifferent versions")
+            print("\nRecommendation: Visually review the audio files")
+            print("\nPossible causes:\nDifferent FPS\nDifferent versions")
             return None
 
         return init_delay_ms
@@ -293,7 +316,8 @@ def initargs() -> tuple[Path, Path]:
             "Tool to calculate audio delay between a reference track and a dubbed track.\n\n"
             "You can either:\n"
             "  \u2022 Process two audio files (reference + dubbed)\n"
-            "  \u2022 Process two video files (reference + dubbed) (You will be asked if there is more than one audio track)\n\n"
+            "  \u2022 Process two video files (reference + dubbed) "
+            "(You will be asked if there is more than one audio track)\n\n"
             f"The basic analysis is limited to {config.default_analysis_time_sec // 60} minutes:\n"
             f"   (the first {config.default_analysis_time_sec} seconds of the audio files.)"
         ),

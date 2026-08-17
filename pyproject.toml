@@ -20,6 +20,9 @@ dependencies = [
     "scipy>=1.10.0",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+
 [project.urls]
 Homepage = "https://github.com/sicuskyle/delay-check"
 

@@ -82,7 +82,7 @@ async def load_spinner(sync_func, *args, message: str = "", **kwargs):
                 sys.stdout.write("\r" + " " * (len(message) + 10) + "\r")
                 sys.stdout.write(f"\r{message}...\n")
             else:
-                sys.stdout.write(f"\r")
+                sys.stdout.write("\r")
             sys.stdout.flush()
         except Exception as e:
             logging.debug(f"Spinner error: {e}")
@@ -128,7 +128,7 @@ def run_cmd(cmd: list, showlog=False) -> subprocess.CompletedProcess[str]:
 
             raise CommandError(error_msg)
 
-        logging.debug(f"Command completed successfully")
+        logging.debug("Command completed successfully")
         return result
 
     except CommandError:

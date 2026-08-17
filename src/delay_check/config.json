@@ -1,11 +1,10 @@
 {
-  "version": "1.0.0",
   "application": {
     "name": "Delay Check",
     "temp_dir_name": "delay_check",
     "default_analysis_time_sec": 300,
     "segment_analysis_time_sec": 120,
-    "confidence_threshold": 55,
+    "confidence_threshold": 80,
     "drift_tolerance_ms": {
       "excellent": 25,
       "good": 50,

@@ -125,8 +125,8 @@ The `config.json` file inside the package allows you to customize all program pa
 ## Interpreting results
 
 ### Correlation score
-- **> 80%**: Good initial correlation
-- **< 80%**: Audio files may be different or have significant modifications
+- **Above `confidence_threshold`** (80 by default, configurable in `config.json`): Good initial correlation
+- **Below `confidence_threshold`**: Audio files may be different or have significant modifications
 
 ### Confidence level
 - **>= 95%**: Constant and reliable delay
@@ -144,7 +144,7 @@ The `config.json` file inside the package allows you to customize all program pa
 ### Error: "ffmpeg not in path"
 Install FFmpeg and add it to your system PATH.
 
-### Low correlation score (< 80%)
+### Low correlation score (below `confidence_threshold`)
 **Possible causes:**
 - The audio files are fundamentally different
 - One of the audio files has additional effects or music

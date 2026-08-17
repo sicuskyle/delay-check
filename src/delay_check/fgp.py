@@ -21,7 +21,9 @@ def compute_fingerprint(audio, sr, n_fft=None, n_mfcc=None):
     return np.mean(mfcc, axis=0)
 
 
-async def find_offset_fgp(reference: np.ndarray, dubbed: np.ndarray, sr=None, n_fft=None, verbose=True) -> tuple:
+async def find_offset_fgp(
+    reference: np.ndarray, dubbed: np.ndarray, sr=None, n_fft=None, verbose=True
+) -> tuple:
     if sr is None:
         sr = config.sample_rate
     if n_fft is None:

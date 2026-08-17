@@ -8,7 +8,7 @@ from typing import Optional
 from pymediainfo import MediaInfo
 
 from delay_check.commons import mk_temp, check_tool, run_cmd
-from delay_check.config import get_config, ConfigError
+from delay_check.config import get_config
 from delay_check.fileinfo import FileInfo
 
 
@@ -262,7 +262,7 @@ def get_samples(file_info: FileInfo) -> Path:
         if os.path.exists(out_file):
             return out_file
 
-        result = run_cmd(cmd)
+        run_cmd(cmd)
 
         if not os.path.exists(out_file):
             raise AudioProcessingError(f"Sample file was not created: {out_file}")
@@ -276,7 +276,9 @@ def get_samples(file_info: FileInfo) -> Path:
         raise AudioProcessingError(f"Failed to generate sample: {e}")
 
 
-def load_audio_sf(file_path: Path, start_sec: float = 0.0, duration_sec: float | None = None) -> np.ndarray:
+def load_audio_sf(
+    file_path: Path, start_sec: float = 0.0, duration_sec: float | None = None
+) -> np.ndarray:
     try:
         if not os.path.exists(file_path):
             raise AudioProcessingError(f"Audio file not found: {file_path}")
