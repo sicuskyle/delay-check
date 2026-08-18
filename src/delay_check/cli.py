@@ -97,16 +97,48 @@ async def segment_delays(ref_sample: Path, dub_sample: Path, max_sec=None) -> li
     return segment_results
 
 
+def _largest_agreement_cluster(delays: list[int], tolerance: int) -> list[int]:
+    ordered = sorted(delays)
+    clusters = []
+    current_cluster = [ordered[0]]
+    for delay in ordered[1:]:
+        if delay - current_cluster[-1] <= tolerance:
+            current_cluster.append(delay)
+        else:
+            clusters.append(current_cluster)
+            current_cluster = [delay]
+    clusters.append(current_cluster)
+    return max(clusters, key=len)
+
+
 def aggregate_delay(segment_results: list[dict]) -> tuple:
+    if not segment_results:
+        return None, []
+
     confidence_threshold = config.confidence_threshold
     confident_delays = [
         s["Delay"] for s in segment_results if s["Score"] >= confidence_threshold
     ]
 
-    if not confident_delays:
-        return None, []
+    if confident_delays:
+        return int(round(statistics.median(confident_delays))), confident_delays
 
-    return int(round(statistics.median(confident_delays))), confident_delays
+    # No single window individually clears the score threshold -- this is
+    # common for real dubbed content, where only part of a window's audio
+    # (shared music/effects, not the re-recorded dialogue) actually
+    # correlates, capping the per-window score even for a correct match.
+    # Fall back to cross-window consensus: many independent windows tightly
+    # agreeing on the same delay is itself strong evidence, regardless of
+    # their individual scores -- the chance of that happening for unrelated
+    # audio is far lower than any single window's score being spuriously
+    # high.
+    all_delays = [s["Delay"] for s in segment_results]
+    cluster = _largest_agreement_cluster(all_delays, config.drift_tolerance['excellent'])
+
+    if len(cluster) > len(segment_results) / 2:
+        return int(round(statistics.median(cluster))), cluster
+
+    return None, []
 
 
 def calculate_confidence(delays: list[int], anchor: int | None = None) -> tuple[float, list[dict]]:

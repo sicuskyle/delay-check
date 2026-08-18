@@ -16,7 +16,7 @@ class Config:
             "name": "Delay Check",
             "temp_dir_name": "delay_check",
             "segment_analysis_time_sec": 60,
-            "confidence_threshold": 80,
+            "confidence_threshold": 20,
             "drift_tolerance_ms": {
                 "excellent": 25,
                 "good": 50,
@@ -144,7 +144,7 @@ class Config:
 
     @property
     def confidence_threshold(self) -> int:
-        return self.get("application", "confidence_threshold", default=80)
+        return self.get("application", "confidence_threshold", default=20)
 
     @property
     def drift_tolerance(self) -> Dict[str, int]:

@@ -96,7 +96,7 @@ class TestAggregateDelay:
         assert confident == [1000, 1010, 1020, 1030]
 
     def test_filters_out_low_confidence_windows(self):
-        # confidence_threshold is 80 in the shipped config.json.
+        # confidence_threshold is 20 in the shipped config.json.
         segment_results = [
             {"Delay": 1000, "Score": 90.0},
             {"Delay": 5000, "Score": 10.0},
@@ -107,14 +107,45 @@ class TestAggregateDelay:
         assert confident == [1000, 1010]
 
     def test_no_confident_windows_returns_none(self):
+        # No score clears the threshold, and the delays don't cluster
+        # tightly enough for the consensus fallback either.
         segment_results = [
-            {"Delay": 1000, "Score": 10.0},
-            {"Delay": 2000, "Score": 20.0},
+            {"Delay": 1000, "Score": 5.0},
+            {"Delay": 5000, "Score": 8.0},
+            {"Delay": 9000, "Score": 12.0},
         ]
         assert aggregate_delay(segment_results) == (None, [])
 
     def test_empty_input_returns_none(self):
         assert aggregate_delay([]) == (None, [])
+
+    def test_consensus_fallback_when_no_window_clears_threshold(self):
+        # Mirrors a real case: real dubbed content where each window's
+        # score stays below confidence_threshold (only part of the audio,
+        # e.g. shared music/effects and not the re-recorded dialogue,
+        # actually correlates), but a majority of windows still agree
+        # tightly on the same delay -- strong evidence despite low scores.
+        segment_results = [
+            {"Delay": 9510, "Score": 15.0},
+            {"Delay": 9511, "Score": 18.0},
+            {"Delay": 9509, "Score": 12.0},
+            {"Delay": 9510, "Score": 10.0},
+            {"Delay": 500, "Score": 5.0},  # outlier, not part of the consensus
+        ]
+        median_delay, cluster = aggregate_delay(segment_results)
+        assert median_delay == 9510
+        assert sorted(cluster) == [9509, 9510, 9510, 9511]
+
+    def test_consensus_requires_strict_majority(self):
+        # Largest cluster is exactly half (2 of 4) -- not a strict
+        # majority, so this must NOT trigger the consensus fallback.
+        segment_results = [
+            {"Delay": 1000, "Score": 5.0},
+            {"Delay": 1005, "Score": 5.0},
+            {"Delay": 5000, "Score": 5.0},
+            {"Delay": 9000, "Score": 5.0},
+        ]
+        assert aggregate_delay(segment_results) == (None, [])
 
 
 class TestSegmentsTimes:

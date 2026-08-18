@@ -125,8 +125,8 @@ The `config.json` file inside the package allows you to customize all program pa
 ## Interpreting results
 
 ### Correlation score
-- **Above `confidence_threshold`** (80 by default, configurable in `config.json`): Good initial correlation
-- **Below `confidence_threshold`**: Audio files may be different or have significant modifications
+- **Above `confidence_threshold`** (20 by default, configurable in `config.json`): Good correlation for that window
+- **Below `confidence_threshold`**: The tool falls back to cross-window consensus -- if a majority of windows still agree tightly on the same delay, that consensus is used instead. Real dubbed content (different dialogue, shared music/effects) often scores well below 100% per window even for a correct match, since only part of each window's audio actually correlates.
 
 ### Confidence level
 - **>= 95%**: Constant and reliable delay

@@ -3,7 +3,7 @@
     "name": "Delay Check",
     "temp_dir_name": "delay_check",
     "segment_analysis_time_sec": 60,
-    "confidence_threshold": 80,
+    "confidence_threshold": 20,
     "drift_tolerance_ms": {
       "excellent": 25,
       "good": 50,
