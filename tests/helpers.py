@@ -1,7 +1,11 @@
 import numpy as np
 from scipy import signal as sp_signal
 
-BAND_EDGES_HZ = [(200, 800), (800, 2000), (2000, 5000), (5000, 10000)]
+BAND_EDGES_HZ = [
+    (200, 500), (500, 900), (900, 1400), (1400, 2000),
+    (2000, 2700), (2700, 3500), (3500, 4500), (4500, 5700),
+    (5700, 7000), (7000, 8500), (8500, 10000), (10000, 12000),
+]
 
 
 def _bandpass(sig: np.ndarray, sr: int, low_hz: float, high_hz: float) -> np.ndarray:
@@ -17,23 +21,28 @@ def make_base_signal(sr: int = 44100, duration_sec: float = 6.0, seed: int = 42)
     not white noise) so it has genuine, reproducible spectral/temporal
     structure to fingerprint and correlate against.
 
-    Both the per-burst frequency band and gain are drawn from the seeded
-    RNG (not cycled in a fixed schedule), so that two different seeds
-    produce genuinely different envelope/spectral-timing structure rather
-    than just different noise instantiations under an identical shared
-    schedule -- otherwise two "unrelated" signals would share the same
-    amplitude envelope and spuriously correlate.
+    The per-burst frequency band, gain, AND duration are all drawn from the
+    seeded RNG (not cycled in a fixed schedule/fixed length), so that two
+    different seeds produce genuinely different envelope/spectral-timing
+    structure rather than just different noise instantiations under an
+    identical shared schedule -- otherwise two "unrelated" signals could
+    share enough amplitude-envelope/band structure to spuriously correlate
+    over short windows. A wide bank of 12 narrow bands (vs. few wide ones)
+    further reduces the chance of two independent signals picking the same
+    band in the same time window.
     """
     rng = np.random.default_rng(seed)
-    burst_sec = 0.5
-    n_bursts = int(np.ceil(duration_sec / burst_sec)) + 1
-    n_samples = int(burst_sec * sr)
+    total_samples = int(duration_sec * sr) + sr  # small buffer, trimmed below
     chunks = []
-    for _ in range(n_bursts):
+    samples_so_far = 0
+    while samples_so_far < total_samples:
+        burst_sec = rng.uniform(0.3, 0.7)
+        n_samples = int(burst_sec * sr)
         low, high = BAND_EDGES_HZ[rng.integers(0, len(BAND_EDGES_HZ))]
         gain = rng.uniform(0.4, 1.0)
         noise = rng.standard_normal(n_samples).astype(np.float32)
         chunks.append((_bandpass(noise, sr, low, high) * gain).astype(np.float32))
+        samples_so_far += n_samples
     sig = np.concatenate(chunks)[: int(duration_sec * sr)]
     peak = np.max(np.abs(sig)) + 1e-9
     return (sig / peak).astype(np.float32)

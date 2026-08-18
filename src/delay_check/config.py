@@ -15,8 +15,7 @@ class Config:
         "application": {
             "name": "Delay Check",
             "temp_dir_name": "delay_check",
-            "default_analysis_time_sec": 300,
-            "segment_analysis_time_sec": 120,
+            "segment_analysis_time_sec": 60,
             "confidence_threshold": 80,
             "drift_tolerance_ms": {
                 "excellent": 25,
@@ -36,6 +35,11 @@ class Config:
                 "hop_length": 512
             }
         },
+        "correlation": {
+            "min_overlap_frames": 10,
+            "min_overlap_fraction": 0.15,
+            "row_std_floor_ratio": 0.01
+        },
         "file_extensions": {
             "containers": [".mkv", ".mp4", ".mka", ".m4a"],
             "audio": [
@@ -47,7 +51,7 @@ class Config:
         "confidence_scoring": {
             "base_confidence": 20.0,
             "max_per_segment": 20.0,
-            "segments_to_analyze": 4,
+            "segments_to_analyze": 8,
             "penalty_factors": {
                 "excellent": 1.0,
                 "good": 0.95,
@@ -135,12 +139,8 @@ class Config:
         return self.get("application", "temp_dir_name", default="delay_check")
 
     @property
-    def default_analysis_time_sec(self) -> int:
-        return self.get("application", "default_analysis_time_sec", default=300)
-
-    @property
     def segment_analysis_time_sec(self) -> int:
-        return self.get("application", "segment_analysis_time_sec", default=120)
+        return self.get("application", "segment_analysis_time_sec", default=60)
 
     @property
     def confidence_threshold(self) -> int:
@@ -171,6 +171,18 @@ class Config:
         })
 
     @property
+    def min_overlap_frames(self) -> int:
+        return self.get("correlation", "min_overlap_frames", default=10)
+
+    @property
+    def min_overlap_fraction(self) -> float:
+        return self.get("correlation", "min_overlap_fraction", default=0.15)
+
+    @property
+    def row_std_floor_ratio(self) -> float:
+        return self.get("correlation", "row_std_floor_ratio", default=0.01)
+
+    @property
     def container_extensions(self) -> list:
         return self.get("file_extensions", "containers", default=[])
 
@@ -198,6 +210,10 @@ class Config:
     @property
     def max_confidence_per_segment(self) -> float:
         return self.get("confidence_scoring", "max_per_segment", default=20.0)
+
+    @property
+    def segments_to_analyze(self) -> int:
+        return self.get("confidence_scoring", "segments_to_analyze", default=8)
 
     @property
     def penalty_factors(self) -> Dict[str, float]:
