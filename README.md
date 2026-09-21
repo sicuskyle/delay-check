@@ -96,31 +96,30 @@ The `config.json` file inside the package allows you to customize all program pa
 
 ### Main parameters
 
-- **`default_analysis_time_sec`**: Maximum analysis time for the first segment (seconds)
-- **`segment_analysis_time_sec`**: Duration of each additional segment (seconds)
-- **`confidence_threshold`**: Minimum correlation threshold for validity (0-100)
-- **`drift_tolerance_ms`**: Drift tolerances in milliseconds
-- **`sample_rate`**: Sampling frequency for processing (Hz)
-- **`n_mfcc`**: Number of MFCC coefficients for audio fingerprinting
+- **`application.segment_analysis_time_sec`**: Duration of each analysis window in seconds (60 by default)
+- **`application.confidence_threshold`**: Minimum correlation score for a window to count as individually confident (20 by default)
+- **`application.drift_tolerance_ms`**: Delay-drift thresholds used by the confidence calculation
+- **`audio_processing.sample_rate`**: Sampling frequency for processing (44100 Hz by default)
+- **`audio_processing.mfcc.n_mfcc`**: Number of MFCC coefficients for audio fingerprinting (13 by default)
+- **`confidence_scoring.base_confidence`**: Initial confidence score before comparing windows (20 by default)
+- **`confidence_scoring.segments_to_analyze`**: Number of windows sampled across the file (8 by default)
+- **`confidence_scoring.penalty_factors`**: Score multipliers for each drift-tolerance range
 
 ## How it works
 
-### Phase 1: Getting the initial delay
-1. Extracts the first 300 seconds (configurable) from both files
-2. Computes audio fingerprints using MFCC
-3. Applies cross-correlation to find the optimal offset
-4. Reports the estimated delay and correlation score
+### Phase 1: Window analysis
+1. Determines the shorter duration of the two extracted audio samples.
+2. Places 8 evenly spaced windows across that shared duration by default.
+3. Loads 60 seconds per window by default (configurable via `segment_analysis_time_sec`).
+4. Computes MFCC fingerprints and applies cross-correlation to each window.
+5. Reports the delay and correlation score for every window.
 
-### Phase 2: Segment validation
-1. Analyzes 4 additional segments (25%, 50%, 75%, end)
-2. Calculates the delay for each segment
-3. Compares consistency over time
-
-### Phase 3: Confidence level
-1. Compares delays across all segments
-2. Applies penalties for time drift
-3. Generates a confidence score (0-100%)
-4. Detects potential issues (VFR, different versions, etc.)
+### Phase 2: Delay consistency and confidence
+1. Selects windows whose correlation score meets `confidence_threshold`.
+2. Uses the median delay of those confident windows as the estimated delay.
+3. If no individual window meets the threshold, uses a strict-majority consensus cluster as a fallback.
+4. Compares all window delays against the estimated delay.
+5. Starts at `base_confidence` and distributes the remaining score across the analyzed windows, applying drift penalties.
 
 ## Interpreting results
 
@@ -129,6 +128,10 @@ The `config.json` file inside the package allows you to customize all program pa
 - **Below `confidence_threshold`**: The tool falls back to cross-window consensus -- if a majority of windows still agree tightly on the same delay, that consensus is used instead. Real dubbed content (different dialogue, shared music/effects) often scores well below 100% per window even for a correct match, since only part of each window's audio actually correlates.
 
 ### Confidence level
+- The default base score is 20 points.
+- The remaining 80 points are distributed across 8 windows, giving each window a maximum of 10 points.
+- Each window receives a multiplier based on its delay drift: `1.0`, `0.95`, `0.85`, `0.70`, or `0.0`.
+- A perfect result scores 100%: `20 + (8 * 10)`.
 - **>= 95%**: Constant and reliable delay
 - **< 95%**: Variable delay, possible sync issue
 
@@ -178,7 +181,11 @@ delay-check/
 ├── tests/
 │   ├── __init__.py
 │   ├── conftest.py
+│   ├── helpers.py
+│   ├── test_cli.py
 │   ├── test_config.py
+│   ├── test_fgp.py
+│   ├── test_fileinfo.py
 │   └── test_utils.py
 ├── pyproject.toml
 ├── LICENSE
