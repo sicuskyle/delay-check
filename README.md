@@ -97,7 +97,7 @@ The `config.json` file inside the package allows you to customize all program pa
 ### Main parameters
 
 - **`application.segment_analysis_time_sec`**: Duration of each analysis window in seconds (60 by default)
-- **`application.confidence_threshold`**: Minimum correlation score for a window to count as individually confident (20 by default)
+- **`application.confidence_threshold`**: Minimum correlation score for a window to count as individually correlated (20 by default)
 - **`application.drift_tolerance_ms`**: Delay-drift thresholds used by the confidence calculation
 - **`audio_processing.sample_rate`**: Sampling frequency for processing (44100 Hz by default)
 - **`audio_processing.mfcc.n_mfcc`**: Number of MFCC coefficients for audio fingerprinting (13 by default)
@@ -116,7 +116,7 @@ The `config.json` file inside the package allows you to customize all program pa
 
 ### Phase 2: Delay consistency and confidence
 1. Selects windows whose correlation score meets `confidence_threshold`.
-2. Uses the median delay of those confident windows as the estimated delay.
+2. Uses the median delay of those correlated windows as the estimated delay.
 3. If no individual window meets the threshold, uses a strict-majority consensus cluster as a fallback.
 4. Compares all window delays against the estimated delay.
 5. Starts at `base_confidence` and distributes the remaining score across the analyzed windows, applying drift penalties.

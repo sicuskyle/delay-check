@@ -74,15 +74,15 @@ class TestCalculateConfidenceWithExplicitAnchor:
 
 
 class TestAggregateDelay:
-    def test_median_of_all_confident_windows(self):
+    def test_median_of_all_correlated_windows(self):
         segment_results = [
             {"Delay": 1000, "Score": 90.0},
             {"Delay": 1010, "Score": 85.0},
             {"Delay": 1020, "Score": 95.0},
         ]
-        median_delay, confident = aggregate_delay(segment_results)
+        median_delay, correlated = aggregate_delay(segment_results)
         assert median_delay == 1010
-        assert confident == [1000, 1010, 1020]
+        assert correlated == [1000, 1010, 1020]
 
     def test_median_with_even_count_averages_middle_two(self):
         segment_results = [
@@ -91,9 +91,9 @@ class TestAggregateDelay:
             {"Delay": 1020, "Score": 90.0},
             {"Delay": 1030, "Score": 90.0},
         ]
-        median_delay, confident = aggregate_delay(segment_results)
+        median_delay, correlated = aggregate_delay(segment_results)
         assert median_delay == 1015
-        assert confident == [1000, 1010, 1020, 1030]
+        assert correlated == [1000, 1010, 1020, 1030]
 
     def test_filters_out_low_confidence_windows(self):
         # confidence_threshold is 20 in the shipped config.json.
@@ -102,11 +102,11 @@ class TestAggregateDelay:
             {"Delay": 5000, "Score": 10.0},
             {"Delay": 1010, "Score": 85.0},
         ]
-        median_delay, confident = aggregate_delay(segment_results)
+        median_delay, correlated = aggregate_delay(segment_results)
         assert median_delay == 1005
-        assert confident == [1000, 1010]
+        assert correlated == [1000, 1010]
 
-    def test_no_confident_windows_returns_none(self):
+    def test_no_correlated_windows_returns_none(self):
         # No score clears the threshold, and the delays don't cluster
         # tightly enough for the consensus fallback either.
         segment_results = [

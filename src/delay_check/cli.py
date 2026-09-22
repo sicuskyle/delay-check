@@ -116,12 +116,12 @@ def aggregate_delay(segment_results: list[dict]) -> tuple:
         return None, []
 
     confidence_threshold = config.confidence_threshold
-    confident_delays = [
+    correlated_delays = [
         s["Delay"] for s in segment_results if s["Score"] >= confidence_threshold
     ]
 
-    if confident_delays:
-        return int(round(statistics.median(confident_delays))), confident_delays
+    if correlated_delays:
+        return int(round(statistics.median(correlated_delays))), correlated_delays
 
     # No single window individually clears the score threshold -- this is
     # common for real dubbed content, where only part of a window's audio
@@ -147,7 +147,7 @@ def calculate_confidence(delays: list[int], anchor: int | None = None) -> tuple[
     if anchor is None:
         print("* Anchor Point: Establishes base delay from first Segment")
     else:
-        print("* Anchor Point: Median delay across confidently-matched windows")
+        print("* Anchor Point: Median delay across correlated windows")
     print(f"* Multi-Point Analysis: Samples {config.segments_to_analyze} windows across the file.")
     print("* Drift Calculation: Measures variance against the anchor.")
     print("* Confidence Scoring: Detects VFR or edits via sync penalties.\n")
@@ -247,7 +247,7 @@ async def delay_check():
 
         segment_results = await segment_delays(ref_sample_path, dub_sample_path)
 
-        median_delay_ms, confident_delays = aggregate_delay(segment_results)
+        median_delay_ms, correlated_delays = aggregate_delay(segment_results)
 
         if median_delay_ms is None:
             print("\n Warning: No confidence found in the correlation")
@@ -258,7 +258,7 @@ async def delay_check():
             return None
 
         print_subt("### Delay Results ###", 55, center=True)
-        print(f" ### Confident windows: {len(confident_delays)}/{len(segment_results)}")
+        print(f" ### Correlated windows: {len(correlated_delays)}/{len(segment_results)}")
         print(
             f" ### Estimated Delay: ({median_delay_ms} ms) "
             f"| ({ms_to_seconds(median_delay_ms)} Seconds)"
