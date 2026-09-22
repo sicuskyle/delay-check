@@ -142,6 +142,22 @@ The `config.json` file inside the package allows you to customize all program pa
 - **76-100ms**: Poor consistency
 - **> 100ms**: Out of sync (possible VFR or editing)
 
+### Timebase drift
+When the delay between windows changes **linearly** over time (a strong straight-line fit, R >= 0.9, slope >= 0.5 ms/s), the tool reports a timebase drift instead of a constant offset:
+
+```
+### Timebase drift ###
+ ### Dubbed is 0.153% (1530 ppm) FASTER than reference
+ ### Delay slope: +1.526 ms per second
+ ### Recommendation: apply tempo correction, not a fixed offset
+ ### Suggested: ffmpeg -i dubbed -af "atempo=0.99848" output
+```
+
+- **Sign convention**: positive growing delay = dubbed content appears earlier over time = dubbed is **faster**; negative trend = dubbed is **slower**.
+- **Units**: `%` (percent of speed difference) and `ppm` (parts per million; 1% = 10,000 ppm).
+- **Fix**: a single delay cannot correct this -- the dubbed track needs a tempo/resample adjustment (the suggested `atempo` value brings the dubbed rate back in line with the reference).
+- The block is printed after the confidence level when confidence is below 95% and a linear drift is detected (it replaces the generic "visually review" recommendation).
+
 ## Troubleshooting
 
 ### Error: "ffmpeg not in path"
@@ -156,6 +172,7 @@ Install FFmpeg and add it to your system PATH.
 
 ### Low confidence level (< 95%)
 **Possible causes:**
+- **Timebase drift**: One track runs slightly faster/slower (see Timebase drift above)
 - **VFR (Variable Frame Rate)**: The video has a variable frame rate
 - **Different versions**: The files come from different sources
 - **Edits**: One of the files has been edited or cut

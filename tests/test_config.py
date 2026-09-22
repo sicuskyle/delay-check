@@ -11,7 +11,7 @@ class TestConfig:
         config = Config()
         assert config.app_name == "Delay Check"
         assert config.temp_dir_name == "delay_check"
-        assert config.segment_analysis_time_sec == 60
+        assert config.segment_analysis_time_sec == 120
         assert config.sample_rate == 44100
         assert config.audio_channels == 1
         assert config.audio_codec == "pcm_s16le"

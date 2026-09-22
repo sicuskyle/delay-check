@@ -78,6 +78,8 @@ async def segment_delays(ref_sample: Path, dub_sample: Path, max_sec=None) -> li
             segment_results.append({
                 "Start": ms_to_timestamp(sec_to_ms(seg_st_time)),
                 "End": ms_to_timestamp(sec_to_ms(seg_st_time + max_sec)),
+                "StartSec": float(seg_st_time),
+                "EndSec": float(seg_st_time + max_sec),
                 "Delay": delay_ms,
                 "Score": corr_score,
             })
@@ -200,6 +202,68 @@ def calculate_confidence(delays: list[int], anchor: int | None = None) -> tuple[
     return round(confidence_score, 2), out_of_sync_segments
 
 
+DRIFT_MIN_R2 = 0.9
+DRIFT_MIN_SLOPE_MS_PER_S = 0.5
+
+
+def _linear_fit(xs: list[float], ys: list[float]) -> tuple[float, float, float]:
+    n = len(xs)
+    mean_x = sum(xs) / n
+    mean_y = sum(ys) / n
+    ss_xx = sum((x - mean_x) ** 2 for x in xs)
+    if ss_xx == 0:
+        return 0.0, mean_y, 0.0
+    ss_xy = sum((x - mean_x) * (y - mean_y) for x, y in zip(xs, ys))
+    slope = ss_xy / ss_xx
+    intercept = mean_y - slope * mean_x
+    ss_tot = sum((y - mean_y) ** 2 for y in ys)
+    ss_res = sum((y - (intercept + slope * x)) ** 2 for x, y in zip(xs, ys))
+    r_squared = 1.0 if ss_tot == 0 else max(0.0, 1.0 - ss_res / ss_tot)
+    return slope, intercept, r_squared
+
+
+def analyze_timebase_drift(segment_results: list[dict]) -> dict | None:
+    if len(segment_results) < 3:
+        return None
+    if not all("StartSec" in s and "EndSec" in s for s in segment_results):
+        return None
+
+    xs = [(s["StartSec"] + s["EndSec"]) / 2 for s in segment_results]
+    ys = [float(s["Delay"]) for s in segment_results]
+
+    slope, _, r_squared = _linear_fit(xs, ys)
+
+    if r_squared < DRIFT_MIN_R2 or abs(slope) < DRIFT_MIN_SLOPE_MS_PER_S:
+        return None
+
+    rate = slope / 1000.0
+    percent = rate * 100.0
+    ppm = int(round(rate * 1_000_000))
+    atempo = 1.0 / (1.0 + rate)
+
+    return {
+        "slope_ms_per_s": slope,
+        "r_squared": r_squared,
+        "percent": abs(percent),
+        "ppm": abs(ppm),
+        "direction": "FASTER" if slope > 0 else "SLOWER",
+        "atempo": atempo,
+    }
+
+
+def print_timebase_drift(drift: dict) -> None:
+    print_subt("### Timebase drift Detected ###", 55, center=True)
+    print(
+        f" ### Dubbed is {drift['percent']:.3f}% ({drift['ppm']} ppm) "
+        f"{drift['direction']} than reference"
+    )
+    print(f" ### Delay slope: {drift['slope_ms_per_s']:+.3f} ms per second")
+    print(" ### Recommendation: apply tempo correction, not a fixed offset")
+    print(
+        f' ### Suggested: ffmpeg -i dubbed -af "atempo={drift["atempo"]:.5f}" output'
+    )
+
+
 def get_file_data(ref_file: Path, dub_file: Path) -> tuple[FileInfo, FileInfo]:
     print_Title("Getting file information")
     try:
@@ -248,8 +312,21 @@ async def delay_check():
         segment_results = await segment_delays(ref_sample_path, dub_sample_path)
 
         median_delay_ms, correlated_delays = aggregate_delay(segment_results)
+        drift = analyze_timebase_drift(segment_results)
 
         if median_delay_ms is None:
+            if drift is not None:
+                print_timebase_drift(drift)
+                print(
+                    "\n No constant delay could be estimated: "
+                    "the delay changes linearly over time."
+                )
+                logging.info(
+                    "Timebase drift: %.3f%% (%s ppm) dub %s, slope %.3f ms/s",
+                    drift["percent"], drift["ppm"],
+                    drift["direction"].lower(), drift["slope_ms_per_s"],
+                )
+                return None
             print("\n Warning: No confidence found in the correlation")
             print(
                 "\n Case #1: The audio files are not the same "
@@ -273,25 +350,31 @@ async def delay_check():
             print(f" ### Confidence percentage: ({(total_percent)})")
             print("-" * 55)
             logging.info(f"Delay {median_delay_ms} file: {dub_file_info.path}")
+            return median_delay_ms
 
-        else:
-            print(f" ### Delay: {median_delay_ms} ms (not constant)")
-            print(f" ### Confidence percentage: ({(total_percent)})")
+        print(f" ### Delay: {median_delay_ms} ms (not constant)")
+        print(f" ### Confidence percentage: ({(total_percent)})")
+        print("-" * 55)
+        if out_diff:
+            print(f"\nDifferences > {config.drift_tolerance['poor']} ms found:\n")
+            print("Segment # | Delay     | Drift")
             print("-" * 55)
-            if out_diff:
-                print(f"\nDifferences > {config.drift_tolerance['poor']} ms found:\n")
-                print("Segment # | Delay     | Drift")
-                print("-" * 55)
-                for segment in out_diff:
-                    idx = segment.get('segment_index')
-                    delay = segment.get('delay_found')
-                    drift = segment.get('drift_amount')
-                    print(f"    #{idx:<5} | {delay:>6}ms | {drift:>6} ms")
+            for segment in out_diff:
+                idx = segment.get('segment_index')
+                delay = segment.get('delay_found')
+                drift_amount = segment.get('drift_amount')
+                print(f"    #{idx:<5} | {delay:>6}ms | {drift_amount:>6} ms")
+        if drift is not None:
+            print_timebase_drift(drift)
+            logging.info(
+                "Timebase drift: %.3f%% (%s ppm) dub %s, slope %.3f ms/s",
+                drift["percent"], drift["ppm"],
+                drift["direction"].lower(), drift["slope_ms_per_s"],
+            )
+        else:
             print("\nRecommendation: Visually review the audio files")
             print("\nPossible causes:\nDifferent FPS\nDifferent versions")
-            return None
-
-        return median_delay_ms
+        return None
 
     except (FileValidationError, AudioProcessingError) as e:
         print(f"\n[ERROR] Process failed: {e}")
