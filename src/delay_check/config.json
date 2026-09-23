@@ -2,7 +2,7 @@
   "application": {
     "name": "Delay Check",
     "temp_dir_name": "delay_check",
-    "segment_analysis_time_sec": 150,
+    "segment_analysis_time_sec": 60,
     "confidence_threshold": 20,
     "drift_tolerance_ms": {
       "excellent": 25,
@@ -35,7 +35,7 @@
   "confidence_scoring": {
     "base_confidence": 20.0,
     "max_per_segment": 20.0,
-    "segments_to_analyze": 4,
+    "segments_to_analyze": 8,
     "penalty_factors": {
       "excellent": 1.0,
       "good": 0.95,

@@ -30,10 +30,47 @@ def get_lowest(a: int, b: int) -> int:
 
 
 def segments_times(max_duration_sec, max_sec, n_segments):
-    clamp = max(max_duration_sec - max_sec, 0)
+    span = max(max_duration_sec - max_sec, 0)
+    if n_segments <= 1:
+        yield 1, 0.0
+        return
     for segment in range(1, n_segments + 1):
-        raw_time = max_duration_sec * (segment / (n_segments + 1))
-        yield segment, min(raw_time, clamp)
+        yield segment, span * (segment - 1) / (n_segments - 1)
+
+
+def _predict_delay_ms(anchors: list[tuple[float, float]], t: float) -> float:
+    """Predicts the delay (ms) expected at time t (seconds) from previously
+    confirmed (time_sec, delay_ms) anchors: zero-order hold with 0-1 anchors,
+    linear extrapolation of the running trend with 2+.
+
+    This is what lets later windows track an arbitrarily large accumulated
+    delay: each window only has to resolve the residual error in this
+    prediction (typically small, since consecutive segments' actual drift
+    delta is tiny compared to the total accumulated over the file), not the
+    full delay -- so the window's own correlation-window size no longer caps
+    how much cumulative timebase drift can be tracked end to end.
+    """
+    if not anchors:
+        return 0.0
+    if len(anchors) == 1:
+        return anchors[0][1]
+    xs = [a[0] for a in anchors]
+    ys = [a[1] for a in anchors]
+    slope, intercept, _ = _linear_fit(xs, ys)
+    return slope * t + intercept
+
+
+def _shifted_starts(seg_st_time: float, predicted_delay_ms: float) -> tuple[float, float]:
+    """Pre-compensates the read start of whichever side is "ahead" by the
+    predicted delay, so find_offset_fgp only has to resolve the residual
+    error in the prediction rather than the full accumulated delay. Sign
+    convention matches find_offset_fgp's own Delay output: positive ->
+    ref leads (ref reads further into itself), negative -> dub leads.
+    """
+    shift_sec = abs(predicted_delay_ms) / 1000.0
+    if predicted_delay_ms >= 0:
+        return seg_st_time + shift_sec, seg_st_time
+    return seg_st_time, seg_st_time + shift_sec
 
 
 async def segment_delays(ref_sample: Path, dub_sample: Path, max_sec=None) -> list[dict]:
@@ -41,6 +78,7 @@ async def segment_delays(ref_sample: Path, dub_sample: Path, max_sec=None) -> li
         max_sec = config.segment_analysis_time_sec
 
     n_segments = config.segments_to_analyze
+    confidence_threshold = config.confidence_threshold
 
     print_Title("Phase 1: Analyzing windows across the file", 55)
     print(f"Strategy:\nFingerprints + Cross-Correlation ({n_segments} windows)")
@@ -61,20 +99,31 @@ async def segment_delays(ref_sample: Path, dub_sample: Path, max_sec=None) -> li
     print('Calculating all window times...')
 
     segment_results = []
+    anchors: list[tuple[float, float]] = []
 
     try:
         for segment, seg_st_time in segments_times(max_duration_sec, max_sec, n_segments):
 
+            predicted_delay_ms = _predict_delay_ms(anchors, seg_st_time)
+            ref_start, dub_start = _shifted_starts(seg_st_time, predicted_delay_ms)
+
             seg_start_ts = ms_to_timestamp(sec_to_ms(seg_st_time))
             print_subt(f" Analyzing Window #{segment} | Start Time: {seg_start_ts}", 50)
+            if predicted_delay_ms:
+                print(f"    Tracking prediction: {predicted_delay_ms:.0f} ms (pre-shifting read start)")
             ref_audio = await load_spinner(
-                load_audio_sf, ref_sample, seg_st_time, max_sec, message="Ref audio"
+                load_audio_sf, ref_sample, ref_start, max_sec, message="Ref audio"
             )
             dub_audio = await load_spinner(
-                load_audio_sf, dub_sample, seg_st_time, max_sec, message="Dub audio"
+                load_audio_sf, dub_sample, dub_start, max_sec, message="Dub audio"
             )
-            delay_ms, corr_score = await find_offset_fgp(ref_audio, dub_audio, verbose=False)
+            residual_ms, corr_score = await find_offset_fgp(ref_audio, dub_audio, verbose=False)
+            delay_ms = int(round(predicted_delay_ms)) + residual_ms
             print(f"    Delay: {delay_ms} ms | Correlation score: {corr_score}%")
+
+            if corr_score >= confidence_threshold:
+                anchors.append((seg_st_time, float(delay_ms)))
+
             segment_results.append({
                 "Start": ms_to_timestamp(sec_to_ms(seg_st_time)),
                 "End": ms_to_timestamp(sec_to_ms(seg_st_time + max_sec)),

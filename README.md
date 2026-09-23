@@ -109,7 +109,7 @@ The `config.json` file inside the package allows you to customize all program pa
 
 ### Phase 1: Window analysis
 1. Determines the shorter duration of the two extracted audio samples.
-2. Places 8 evenly spaced windows across that shared duration by default.
+2. Places 8 evenly spaced windows from 0 to the end of that shared duration by default (first window always starts at 0, last window ends at the file end).
 3. Loads 60 seconds per window by default (configurable via `segment_analysis_time_sec`).
 4. Computes MFCC fingerprints and applies cross-correlation to each window.
 5. Reports the delay and correlation score for every window.
