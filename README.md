@@ -4,8 +4,10 @@ Tool to calculate the time offset (delay) between two audio files, ideal for syn
 
 ## Features
 
-- **Precise delay detection**: Uses audio fingerprints (MFCC) and cross-correlation
-- **Multi-segment validation**: Analyzes delay consistency over time
+    - **Precise delay detection**: Uses audio fingerprints (MFCC) and multi-channel cross-correlation with overlap normalization and sub-frame interpolation
+- **Multi-window validation**: Analyzes delay consistency over time across evenly spaced windows
+- **Trend tracking**: Predicts the expected delay from confirmed windows and retries divergent windows with a pre-shifted read
+- **Timebase drift detection**: Detects linear delay drift (speed mismatch) and suggests an `atempo` correction instead of a fixed offset
 - **Multi-format support**: Works with audio and video files
 - **Track selection**: Interactive handling of multiple audio tracks
 - **Flexible configuration**: All parameters adjustable via JSON
@@ -104,6 +106,9 @@ The `config.json` file inside the package allows you to customize all program pa
 - **`confidence_scoring.base_confidence`**: Initial confidence score before comparing windows (20 by default)
 - **`confidence_scoring.segments_to_analyze`**: Number of windows sampled across the file (8 by default)
 - **`confidence_scoring.penalty_factors`**: Score multipliers for each drift-tolerance range
+- **`correlation.min_overlap_frames`**: Minimum overlapping frames required for a lag to be considered (10 by default)
+- **`correlation.min_overlap_fraction`**: Minimum overlap as a fraction of the shorter window (0.15 by default)
+- **`correlation.row_std_floor_ratio`**: Relative floor used to discard silent/degenerate MFCC rows (0.01 by default)
 
 ## How it works
 
@@ -111,21 +116,24 @@ The `config.json` file inside the package allows you to customize all program pa
 1. Determines the shorter duration of the two extracted audio samples.
 2. Places 8 evenly spaced windows from 0 to the end of that shared duration by default (first window always starts at 0, last window ends at the file end).
 3. Loads 60 seconds per window by default (configurable via `segment_analysis_time_sec`).
-4. Computes MFCC fingerprints and applies cross-correlation to each window.
-5. Reports the delay and correlation score for every window.
+4. Computes MFCC fingerprints and applies multi-channel cross-correlation to each window (per-coefficient z-score, overlap normalization, parabolic sub-frame peak refinement).
+5. Tracks the delay trend from windows that cleared `confidence_threshold`. If a naive (unshifted) result diverges from the predicted trend by more than 20% of the window's length (`TRACKING_DEVIATION_FRACTION`, typical of the correlation overlap-capacity limit), the window is retried with a pre-shifted read and only the residual is resolved.
+6. Reports the delay and correlation score for every window.
 
 ### Phase 2: Delay consistency and confidence
 1. Selects windows whose correlation score meets `confidence_threshold`.
-2. Uses the median delay of those correlated windows as the estimated delay.
-3. If no individual window meets the threshold, uses a strict-majority consensus cluster as a fallback.
-4. Compares all window delays against the estimated delay.
-5. Starts at `base_confidence` and distributes the remaining score across the analyzed windows, applying drift penalties.
+2. Requires at least **two** of those correlated windows to agree with each other within `drift_tolerance.excellent` (25 ms by default); a single high-score window alone is never trusted, since with a permissive per-window threshold one window can score high by coincidence on unrelated audio.
+3. Uses the median delay of that agreeing cluster as the estimated delay.
+4. If there is no corroborated high-score agreement, falls back to a strict-majority consensus cluster over **all** window delays (regardless of individual scores) -- many independent windows tightly agreeing is itself strong evidence, and is also the common path for real dubbed content where only shared music/effects correlate per window.
+5. Compares all window delays against the estimated delay.
+6. Starts at `base_confidence` and distributes the remaining score across the analyzed windows, applying drift penalties.
 
 ## Interpreting results
 
 ### Correlation score
-- **Above `confidence_threshold`** (20 by default, configurable in `config.json`): Good correlation for that window
-- **Below `confidence_threshold`**: The tool falls back to cross-window consensus -- if a majority of windows still agree tightly on the same delay, that consensus is used instead. Real dubbed content (different dialogue, shared music/effects) often scores well below 100% per window even for a correct match, since only part of each window's audio actually correlates.
+- **Above `confidence_threshold`** (20 by default, configurable in `config.json`): Good correlation for that window -- but a single such window is not enough on its own. At least two correlated windows must agree within the excellent drift tolerance before their median is accepted.
+- **Below `confidence_threshold`**, or without corroborated agreement: The tool falls back to cross-window consensus -- if a strict majority of windows still agree tightly on the same delay, that consensus is used instead. Real dubbed content (different dialogue, shared music/effects) often scores well below 100% per window even for a correct match, since only part of each window's audio actually correlates.
+- **No agreement found**: the tool reports that no reliable constant delay could be estimated. Possible causes: unrelated content, or different cuts/versions (Director's Cut, Extended, Theatrical, Unrated, etc.) with added/removed/reordered scenes or different music.
 
 ### Confidence level
 - The default base score is 20 points.
@@ -156,7 +164,7 @@ When the delay between windows changes **linearly** over time (a strong straight
 - **Sign convention**: positive growing delay = dubbed content appears earlier over time = dubbed is **faster**; negative trend = dubbed is **slower**.
 - **Units**: `%` (percent of speed difference) and `ppm` (parts per million; 1% = 10,000 ppm).
 - **Fix**: a single delay cannot correct this -- the dubbed track needs a tempo/resample adjustment (the suggested `atempo` value brings the dubbed rate back in line with the reference).
-- The block is printed after the confidence level when confidence is below 95% and a linear drift is detected (it replaces the generic "visually review" recommendation).
+- The block is printed when a linear drift is detected: either after the confidence level when confidence is below 95% (replacing the generic "visually review" recommendation), or when no constant delay could be estimated at all (in place of the generic no-confidence warning).
 
 ## Troubleshooting
 
@@ -170,9 +178,16 @@ Install FFmpeg and add it to your system PATH.
 - Significant differences in equalization or volume
 - The files are not related
 
+### No reliable constant delay found
+**Possible causes:**
+- The audio files are not related content
+- Different cuts/versions (Director's Cut, Extended, Theatrical, Unrated, etc.) with added/removed/reordered scenes or different music
+- Only one window cleared the threshold and no corroborating window agreed with it (a single high-score window is discarded as a possible coincidence)
+
 ### Low confidence level (< 95%)
 **Possible causes:**
 - **Timebase drift**: One track runs slightly faster/slower (see Timebase drift above)
+- **No corroborated agreement**: Fewer than two correlated windows agreed within the excellent tolerance, so the delay came from the consensus fallback
 - **VFR (Variable Frame Rate)**: The video has a variable frame rate
 - **Different versions**: The files come from different sources
 - **Edits**: One of the files has been edited or cut
