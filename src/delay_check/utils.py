@@ -247,6 +247,21 @@ def get_samples(file_info: FileInfo) -> Path:
         track_id = file_info.selected_track
         out_file = file_info.get_sample_path()
 
+        logging.info(f"Generating sample: {out_file}")
+
+        if os.path.exists(out_file):
+            return out_file
+
+        # ffmpeg writes to a temp path first, then this does an atomic
+        # rename to out_file only on confirmed success -- so an interrupted
+        # or failed run (Ctrl+C, disk full, crash) never leaves a partial/
+        # corrupt file sitting at the cached path. Without this, a broken
+        # file left behind would be silently reused on every later run (the
+        # os.path.exists check above can't tell a truncated file from a
+        # good one), surfacing as a confusing failure deep in audio loading
+        # instead of here.
+        tmp_file = out_file.with_name(out_file.stem + ".part" + out_file.suffix)
+
         cmd = [
             ffmpeg_cmd, '-y',
             '-i', str(file_info.path),
@@ -254,18 +269,19 @@ def get_samples(file_info: FileInfo) -> Path:
             '-ac', str(get_config().audio_channels),
             '-acodec', get_config().audio_codec,
             '-ar', str(get_config().sample_rate),
-            str(out_file)
+            str(tmp_file)
         ]
 
-        logging.info(f"Generating sample: {out_file}")
+        try:
+            run_cmd(cmd)
 
-        if os.path.exists(out_file):
-            return out_file
+            if not os.path.exists(tmp_file):
+                raise AudioProcessingError(f"Sample file was not created: {tmp_file}")
 
-        run_cmd(cmd)
-
-        if not os.path.exists(out_file):
-            raise AudioProcessingError(f"Sample file was not created: {out_file}")
+            os.replace(tmp_file, out_file)
+        finally:
+            if os.path.exists(tmp_file):
+                os.remove(tmp_file)
 
         return out_file
 
