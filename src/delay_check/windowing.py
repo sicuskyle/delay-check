@@ -126,8 +126,8 @@ async def segment_delays(ref_sample: Path, dub_sample: Path, max_sec=None) -> li
                 if abs(delay_ms - predicted_delay_ms) > deviation_cap_ms:
                     print(
                         f"    Naive delay ({delay_ms} ms) diverges from tracked "
-                        f"trend ({predicted_delay_ms:.0f} ms) -- retrying with "
-                        f"pre-shifted read"
+                        f"trend ({predicted_delay_ms:.0f} ms)\n"
+                        f"    -- retrying with pre-shifted read"
                     )
                     ref_start, dub_start = _shifted_starts(seg_st_time, predicted_delay_ms)
                     residual_ms, retry_score = await _correlate_window(
