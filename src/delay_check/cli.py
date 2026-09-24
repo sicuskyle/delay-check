@@ -166,11 +166,11 @@ async def segment_delays(ref_sample: Path, dub_sample: Path, max_sec=None) -> li
         raise
 
     print_subt("### Window delay list ###", 58, center=True)
-    print("# |    Start   -   End        |  Delay      | Score\n" + "-" * 58)
+    print(f"{'#':>2} |    Start   -   End        | {'Delay':>9} | {'Score':>6}\n" + "-" * 58)
     for idx, segment in enumerate(segment_results, start=1):
         print(
-            f"{idx}: |{segment['Start']} - {segment['End']}| "
-            f"{segment['Delay']} ms | {segment['Score']}%"
+            f"{idx:>2}: |{segment['Start']} - {segment['End']}| "
+            f"{segment['Delay']:>7} ms | {segment['Score']:>6}%"
         )
 
     return segment_results
@@ -199,16 +199,26 @@ def aggregate_delay(segment_results: list[dict]) -> tuple:
         s["Delay"] for s in segment_results if s["Score"] >= confidence_threshold
     ]
 
-    if correlated_delays:
-        return int(round(statistics.median(correlated_delays))), correlated_delays
+    # A single window clearing the score threshold is not enough on its own:
+    # with several independent windows checked against a permissive
+    # per-window threshold (real dubbed content often only scores well on
+    # shared music/effects, not dialogue, so the threshold has to stay low),
+    # unrelated audio has a real chance of exactly one window scoring high
+    # by coincidence. Require at least two correlated windows to agree with
+    # each other (same tolerance as the consensus fallback below) before
+    # trusting them outright.
+    if len(correlated_delays) > 1:
+        cluster = _largest_agreement_cluster(correlated_delays, config.drift_tolerance['excellent'])
+        if len(cluster) > 1:
+            return int(round(statistics.median(cluster))), cluster
 
-    # No single window individually clears the score threshold -- this is
-    # common for real dubbed content, where only part of a window's audio
-    # (shared music/effects, not the re-recorded dialogue) actually
-    # correlates, capping the per-window score even for a correct match.
-    # Fall back to cross-window consensus: many independent windows tightly
-    # agreeing on the same delay is itself strong evidence, regardless of
-    # their individual scores -- the chance of that happening for unrelated
+    # No corroborated high-score agreement. This is also the common path for
+    # real dubbed content, where only part of a window's audio (shared
+    # music/effects, not the re-recorded dialogue) actually correlates,
+    # capping the per-window score even for a correct match. Fall back to
+    # cross-window consensus: many independent windows tightly agreeing on
+    # the same delay is itself strong evidence, regardless of their
+    # individual scores -- the chance of that happening for unrelated
     # audio is far lower than any single window's score being spuriously
     # high.
     all_delays = [s["Delay"] for s in segment_results]
@@ -396,7 +406,7 @@ async def delay_check():
                 print_timebase_drift(drift)
                 print(
                     "\n No constant delay could be estimated: "
-                    "the delay changes linearly over time."
+                    "\n the delay changes linearly over time."
                 )
                 logging.info(
                     "Timebase drift: %.3f%% (%s ppm) dub %s, slope %.3f ms/s",
@@ -404,10 +414,14 @@ async def delay_check():
                     drift["direction"].lower(), drift["slope_ms_per_s"],
                 )
                 return None
-            print("\n Warning: No confidence found in the correlation")
+
+            print_subt("Warning: No confidence found in the correlation", 55, center=True)
             print(
-                "\n Case #1: The audio files are not the same "
-                "(excluding dubbing and volume differences)"
+                "\n Case: No reliable constant delay found between these audio files.\n"
+                " Possible causes:\n"
+                "  1. The audio files are not related content\n"
+                "  2. Different cuts/versions (Director's Cut, Extended, Theatrical,\n"
+                "    Unrated, etc.) with added/removed/reordered scenes or different music"
             )
             return None
 
