@@ -1,4 +1,6 @@
-from delay_check.confidence import aggregate_delay, calculate_confidence
+from delay_check.confidence import (
+    aggregate_delay, calculate_confidence, _largest_agreement_cluster,
+)
 
 
 class TestCalculateConfidence:
@@ -144,3 +146,53 @@ class TestAggregateDelay:
             {"Delay": 9000, "Score": 5.0},
         ]
         assert aggregate_delay(segment_results) == (None, [])
+
+    def test_single_high_score_window_alone_is_not_trusted(self):
+        # A real-world case: two edited versions of the same film share an
+        # identical opening (one strong match) but diverge afterward (every
+        # other window scores low and disagrees). One lone high-score
+        # window must not be enough on its own -- see
+        # test_requires_corroboration_even_with_one_strong_score below for
+        # the direct unit-level check of that rule.
+        segment_results = [
+            {"Delay": -233, "Score": 72.76},
+            {"Delay": -3702, "Score": 8.14},
+            {"Delay": -38884, "Score": 7.26},
+            {"Delay": 43336, "Score": 11.47},
+        ]
+        assert aggregate_delay(segment_results) == (None, [])
+
+    def test_requires_corroboration_even_with_one_strong_score(self):
+        # Same shape as above, distilled: exactly one correlated_delays
+        # entry, regardless of how high its score is, must fall through to
+        # the consensus fallback rather than being trusted outright.
+        segment_results = [
+            {"Delay": 1000, "Score": 99.0},
+            {"Delay": 5000, "Score": 10.0},
+            {"Delay": 9000, "Score": 10.0},
+        ]
+        assert aggregate_delay(segment_results) == (None, [])
+
+
+class TestLargestAgreementCluster:
+    def test_single_tight_cluster(self):
+        assert _largest_agreement_cluster([100, 105, 110], 10) == [100, 105, 110]
+
+    def test_returns_the_largest_among_multiple_clusters(self):
+        result = _largest_agreement_cluster([100, 105, 500, 505, 510], 10)
+        assert sorted(result) == [500, 505, 510]
+
+    def test_single_element(self):
+        assert _largest_agreement_cluster([42], 10) == [42]
+
+    def test_tolerance_is_a_chain_not_a_fixed_window(self):
+        # 100 -> 110 (diff 10, ok) -> 120 (diff from 110 is 10, ok) chains
+        # into one cluster even though 100 and 120 differ by 20.
+        result = _largest_agreement_cluster([100, 110, 120], 10)
+        assert sorted(result) == [100, 110, 120]
+
+    def test_ties_prefer_the_first_cluster_found(self):
+        # Two clusters of equal size (2 and 2): max() with key=len returns
+        # the first one encountered when sorted, i.e. the lower-valued pair.
+        result = _largest_agreement_cluster([100, 105, 500, 505], 10)
+        assert sorted(result) == [100, 105]

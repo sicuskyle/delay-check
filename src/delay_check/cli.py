@@ -139,7 +139,13 @@ async def delay_check():
             )
         else:
             print("\nRecommendation: Visually review the audio files")
-            print("\nPossible causes:\nDifferent FPS\nDifferent versions")
+            print(
+                "\nPossible causes (global timebase drift already ruled out):\n"
+                "  1. Content edits/cuts affecting only part of the file\n"
+                "     (added/removed/reordered scenes)\n"
+                "  2. A frame-rate mismatch localized to part of the file,\n"
+                "     not a constant rate across the whole file"
+            )
         return None
 
     except (FileValidationError, AudioProcessingError) as e:
