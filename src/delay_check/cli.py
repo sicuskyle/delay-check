@@ -14,7 +14,10 @@ from delay_check.utils import (
 )
 from delay_check.windowing import segment_delays
 from delay_check.confidence import aggregate_delay, calculate_confidence
-from delay_check.drift import analyze_timebase_drift, print_timebase_drift
+from delay_check.drift import (
+    analyze_timebase_drift, print_timebase_drift,
+    detect_progressive_delay, print_progressive_delay,
+)
 from delay_check.fileinfo import FileInfo
 
 
@@ -75,6 +78,7 @@ async def delay_check():
 
         median_delay_ms, correlated_delays = aggregate_delay(segment_results)
         drift = analyze_timebase_drift(segment_results)
+        progressive = detect_progressive_delay(segment_results)
 
         if median_delay_ms is None:
             if drift is not None:
@@ -87,6 +91,19 @@ async def delay_check():
                     "Timebase drift: %.3f%% (%s ppm) dub %s, slope %.3f ms/s",
                     drift["percent"], drift["ppm"],
                     drift["direction"].lower(), drift["slope_ms_per_s"],
+                )
+                return None
+
+            if progressive is not None:
+                print_progressive_delay(progressive)
+                print(
+                    "\n No constant delay could be estimated: "
+                    "\n the delay jumps at specific points rather than "
+                    "staying constant or drifting smoothly."
+                )
+                logging.info(
+                    "Progressive delay: %d step(s), total %.0f ms",
+                    len(progressive["steps"]), progressive["total_jump_ms"],
                 )
                 return None
 
@@ -136,6 +153,12 @@ async def delay_check():
                 "Timebase drift: %.3f%% (%s ppm) dub %s, slope %.3f ms/s",
                 drift["percent"], drift["ppm"],
                 drift["direction"].lower(), drift["slope_ms_per_s"],
+            )
+        elif progressive is not None:
+            print_progressive_delay(progressive)
+            logging.info(
+                "Progressive delay: %d step(s), total %.0f ms",
+                len(progressive["steps"]), progressive["total_jump_ms"],
             )
         else:
             print("\nRecommendation: Visually review the audio files")

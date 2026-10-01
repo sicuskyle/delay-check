@@ -19,12 +19,22 @@ _DRIFT = {
 }
 
 
+_PROGRESSIVE = {
+    "total_jump_ms": 2000.0,
+    "steps": [{
+        "before_time_sec": 60.0, "after_time_sec": 120.0,
+        "before_delay_ms": 1000.0, "after_delay_ms": 3000.0,
+        "jump_ms": 2000.0,
+    }],
+}
+
+
 def _patch_pipeline(
     monkeypatch, *, median_delay_ms, correlated_delays=None, drift=None,
-    confidence=(100.0, []),
+    progressive=None, confidence=(100.0, []),
 ):
     """Patches every delay_check() collaborator except the branching logic
-    under test, so each of its five possible outcomes can be exercised in
+    under test, so each of its possible outcomes can be exercised in
     isolation without touching real files, ffmpeg, or audio correlation.
     """
     monkeypatch.setattr(cli, "initargs", lambda: ("ref.mkv", "dub.mkv"))
@@ -47,6 +57,9 @@ def _patch_pipeline(
     )
     monkeypatch.setattr(cli, "analyze_timebase_drift", lambda segment_results: drift)
     monkeypatch.setattr(
+        cli, "detect_progressive_delay", lambda segment_results: progressive
+    )
+    monkeypatch.setattr(
         cli, "calculate_confidence", lambda delays, anchor=None: confidence
     )
 
@@ -67,6 +80,17 @@ class TestDelayCheckOutcomes:
 
         assert result is None
         assert "No constant delay could be estimated" in capsys.readouterr().out
+
+    @pytest.mark.asyncio
+    async def test_progressive_with_no_median_returns_none(self, monkeypatch, capsys):
+        _patch_pipeline(monkeypatch, median_delay_ms=None, progressive=_PROGRESSIVE)
+
+        result = await cli.delay_check()
+
+        assert result is None
+        out = capsys.readouterr().out
+        assert "PROGRESSIVE DELAY DETECTED" in out.upper()
+        assert "delay jumps at specific points" in out
 
     @pytest.mark.asyncio
     async def test_case2_no_median_no_drift_returns_none(self, monkeypatch, capsys):
@@ -102,6 +126,23 @@ class TestDelayCheckOutcomes:
         out = capsys.readouterr().out
         assert "not constant" in out
         assert "TIMEBASE DRIFT DETECTED" in out.upper()
+
+    @pytest.mark.asyncio
+    async def test_low_confidence_with_progressive_returns_none(self, monkeypatch, capsys):
+        _patch_pipeline(
+            monkeypatch, median_delay_ms=5000, correlated_delays=[5000],
+            drift=None, progressive=_PROGRESSIVE, confidence=(40.0, []),
+        )
+
+        result = await cli.delay_check()
+
+        assert result is None
+        out = capsys.readouterr().out
+        assert "not constant" in out
+        assert "PROGRESSIVE DELAY DETECTED" in out.upper()
+        # drift already checked first -- progressive must not also print the
+        # generic "visually review" recommendation meant for neither case.
+        assert "Recommendation: Visually review" not in out
 
     @pytest.mark.asyncio
     async def test_case5_low_confidence_no_drift_returns_none(self, monkeypatch, capsys):
